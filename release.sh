@@ -23,7 +23,7 @@
 # IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
 # OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-# OTHER DEALINGS IN THE SOFTWARE.
+# OTHER DEALINGS IN THE SOFTWARE..
 #
 # For more information, please refer to <http://unlicense.org/>
 
@@ -2189,37 +2189,37 @@ else
 	if [ "$repository_type" = "git" ]; then
 		changelog_url=
 		changelog_version=
-		changelog_previous="[Previous Releases](${project_github_url}/releases)"
+		changelog_previous=""
 		changelog_url_wowi=
 		changelog_version_wowi=
-		changelog_previous_wowi="[url=${project_github_url}/releases]Previous Releases[/url]"
+		changelog_previous_wowi=""
 		if [ -z "$previous_version" ] && [ -z "$tag" ]; then
 			# no range, show all commits up to ours
-			changelog_url="[Full Changelog](${project_github_url}/commits/${project_hash})"
-			changelog_version="[${project_version}](${project_github_url}/tree/${project_hash})"
-			changelog_url_wowi="[url=${project_github_url}/commits/${project_hash}]Full Changelog[/url]"
-			changelog_version_wowi="[url=${project_github_url}/tree/${project_hash}]${project_version}[/url]"
+			changelog_url=""
+			changelog_version=""
+			changelog_url_wowi=""
+			changelog_version_wowi=""
 			_changelog_range="$project_hash"
 		elif [ -z "$previous_version" ] && [ -n "$tag" ]; then
 			# first tag, show all commits upto it
-			changelog_url="[Full Changelog](${project_github_url}/commits/${tag})"
-			changelog_version="[${project_version}](${project_github_url}/tree/${tag})"
-			changelog_url_wowi="[url=${project_github_url}/commits/${tag}]Full Changelog[/url]"
-			changelog_version_wowi="[url=${project_github_url}/tree/${tag}]${project_version}[/url]"
+			changelog_url=""
+			changelog_version=""
+			changelog_url_wowi=""
+			changelog_version_wowi=""
 			_changelog_range="$tag"
 		elif [ -n "$previous_version" ] && [ -z "$tag" ]; then
 			# compare between last tag and our commit
-			changelog_url="[Full Changelog](${project_github_url}/compare/${previous_version}...${project_hash})"
-			changelog_version="[$project_version](${project_github_url}/tree/${project_hash})"
-			changelog_url_wowi="[url=${project_github_url}/compare/${previous_version}...${project_hash}]Full Changelog[/url]"
-			changelog_version_wowi="[url=${project_github_url}/tree/${project_hash}]${project_version}[/url]"
+			changelog_url=""
+			changelog_version=""
+			changelog_url_wowi=""
+			changelog_version_wowi=""
 			_changelog_range="$previous_version..$project_hash"
 		elif [ -n "$previous_version" ] && [ -n "$tag" ]; then
 			# compare between last tag and our tag
-			changelog_url="[Full Changelog](${project_github_url}/compare/${previous_version}...${tag})"
-			changelog_version="[$project_version](${project_github_url}/tree/${tag})"
-			changelog_url_wowi="[url=${project_github_url}/compare/${previous_version}...${tag}]Full Changelog[/url]"
-			changelog_version_wowi="[url=${project_github_url}/tree/${tag}]${project_version}[/url]"
+			changelog_url=""
+			changelog_version=""
+			changelog_url_wowi=""
+			changelog_version_wowi=""
 			_changelog_range="$previous_version..$tag"
 		fi
 		# lazy way out
