@@ -539,17 +539,22 @@ set_info_git() {
 	_si_tag=$( git -C "$si_repo_dir" describe --tags --always --abbrev=7 2>/dev/null )
 	si_tag=$( git -C "$si_repo_dir" describe --tags --always --abbrev=0 2>/dev/null )
 	# Set $si_project_version to the version number of HEAD. May be empty if there are no commits.
-	si_project_version=$si_tag
+	si_project_version="$si_tag"
 	# The HEAD is not tagged if the HEAD is several commits past the most recent tag.
 	if [ "$si_tag" = "$si_project_hash" ]; then
 		# --abbrev=0 expands out the full sha if there was no previous tag
-		si_project_version=$_si_tag
+		si_project_version="$_si_tag"
 		si_previous_tag=
 		si_tag=
 	elif [ "$_si_tag" != "$si_tag" ]; then
 		# not on a tag
 		si_project_version=$( git -C "$si_repo_dir" describe --tags --abbrev=7 --exclude="*[Aa][Ll][Pp][Hh][Aa]*" 2>/dev/null )
-		si_previous_tag=$( git -C "$si_repo_dir" describe --tags --abbrev=0 --exclude="*[Aa][Ll][Pp][Hh][Aa]*" 2>/dev/null )
+		if [[ -n $si_project_version ]]; then
+			si_previous_tag=$( git -C "$si_repo_dir" describe --tags --abbrev=0 --exclude="*[Aa][Ll][Pp][Hh][Aa]*" 2>/dev/null )
+		else # no previous non-alpha tag
+			si_project_version="$_si_tag"
+			si_previous_tag=
+		fi
 		si_tag=
 	else # we're on a tag, just jump back one commit
 		if [[ ${si_tag,,} != *"beta"* && ${si_tag,,} != *"alpha"* ]]; then
@@ -954,16 +959,16 @@ if [ -f "$pkgmeta_file" ]; then
 						yaml_listitem "$yaml_line"
 						case $pkgmeta_phase in
 							tools-used)
-								relations["$yaml_item"]="tool"
+								relations["${yaml_item,,}"]="tool"
 								;;
 							required-dependencies)
-								relations["$yaml_item"]="requiredDependency"
+								relations["${yaml_item,,}"]="requiredDependency"
 								;;
 							optional-dependencies)
-								relations["$yaml_item"]="optionalDependency"
+								relations["${yaml_item,,}"]="optionalDependency"
 								;;
 							embedded-libraries)
-								relations["$yaml_item"]="embeddedLibrary"
+								relations["${yaml_item,,}"]="embeddedLibrary"
 								;;
 						esac
 						;;
@@ -1006,7 +1011,7 @@ fi
 vcs_addignore() {
 	local _ignored_path="$1"
 	if [[ -d "$topdir/$_ignored_path" ]]; then
-		_vcs_ignore="$_ignored_path*"
+		_ignored_path="$_ignored_path*"
 	fi
 	# Don't ignore a manual changelog generated for the build
 	if [[ -z $changelog || $_ignored_path != "$changelog" ]]; then
@@ -1623,6 +1628,7 @@ copy_directory_tree() {
 	if [ ! -d "$_cdt_destdir" ]; then
 		mkdir -p "$_cdt_destdir"
 	fi
+
 	# Create a "find" command to list all of the files in the current directory, minus any ones we need to prune.
 	_cdt_find_cmd="find ."
 	# Prune everything that begins with a dot except for the current directory ".".
@@ -1635,7 +1641,9 @@ copy_directory_tree() {
 	esac
 	# Print the filename, but suppress the current directory ".".
 	_cdt_find_cmd+=" -o \! -name \".\" -print"
-	( cd "$_cdt_srcdir" && eval "$_cdt_find_cmd" ) | while read -r file; do
+
+	local file
+	while read -r file; do # <( cd "$_cdt_srcdir" && eval "$_cdt_find_cmd" )
 		file=${file#./}
 		_cdt_source_file="$_cdt_srcdir/$file"
 		if [ -f "$_cdt_source_file" ]; then
@@ -1659,14 +1667,23 @@ copy_directory_tree() {
 			if [ -n "$_cdt_skip_copy" ]; then
 				echo "  Ignoring: $file"
 			else
-				dir=${file%/*}
-				if [ "$dir" != "$file" ]; then
-					mkdir -p "$_cdt_destdir/$dir"
+				_cdt_subdir=${file%/*}
+				if [ "$_cdt_subdir" != "$file" ]; then
+					mkdir -p "$_cdt_destdir/$_cdt_subdir"
+				fi
+				# Check for marked hard embedded libraries
+				_cdt_external_slug=
+				if [[ $_cdt_source_file == *".lua" ]] && _cdt_external_slug=$( grep -io "@curseforge-project-slug[[:blank:]]*:[[:blank:]]*[^@]\+@" "$_cdt_source_file"); then
+					_cdt_external_slug="${_cdt_external_slug//[[:blank:]@]/}"
+					_cdt_external_slug="${_cdt_external_slug##*:}"
+					if [[ -n $_cdt_external_slug ]]; then
+						relations["${_cdt_external_slug,,}"]="embeddedLibrary"
+					fi
 				fi
 				# Check if the file matches a pattern for keyword replacement.
 				if [ -n "$_cdt_only_copy" ] || ! match_pattern "$file" "*.lua:*.md:*.toc:*.txt:*.xml"; then
-					echo "  Copying: $file (unchanged)"
-					cp "$_cdt_source_file" "$_cdt_destdir/$dir"
+					echo "  Copying: $file (unchanged)${_cdt_external_slug:+(embedded: "$_cdt_external_slug")}"
+					cp "$_cdt_source_file" "$_cdt_destdir/$_cdt_subdir"
 				else
 					_cdt_file_gametype="$_cdt_gametype"
 					# Set the filters for replacement based on file extension.
@@ -1722,7 +1739,7 @@ copy_directory_tree() {
 					# Set version control values for the file.
 					set_info_file "$_cdt_source_file"
 
-					echo "  Copying: $file"
+					echo "  Copying: $file${_cdt_external_slug:+ (embedded: "$_cdt_external_slug")}"
 
 					# Make sure we're not causing any surprises
 					if [[ -z $_cdt_file_gametype && ( $file == *".lua" || $file == *".xml" || $file == *".toc" ) ]] && grep -q '@\(non-\)\?version-\(retail\|classic\|bcc\|wrath\)@' "$_cdt_source_file"; then
@@ -1767,17 +1784,11 @@ copy_directory_tree() {
 
 							eval < "$_cdt_source_file" "$_cdt_filters" 3>&1 > "$_cdt_destdir/$new_file"
 						done
-
-						# Remove the fallback TOC file if it doesn't have an interface value or if you a TOC file for each game type
-						# if [[ -z $root_toc_version || ${#si_game_type_interface[@]} -eq 3 ]]; then
-						# 	echo "    Removing $file"
-						# 	rm -f "$_cdt_destdir/$file"
-						# fi
 					fi
 				fi
 			fi
 		fi
-	done || exit 1 # actually exit if we end with an error
+	done < <( cd "$_cdt_srcdir" && eval "$_cdt_find_cmd" )
 	if [ -z "$_external_dir" ]; then
 		end_group "copy"
 	fi
@@ -1985,7 +1996,7 @@ process_external() {
 		fi
 
 		if [ -n "$external_slug" ]; then
-			relations["$external_slug"]="embeddedLibrary"
+			relations["${external_slug,,}"]="embeddedLibrary"
 		fi
 
 		echo "Fetching external: $external_dir"
@@ -2469,7 +2480,7 @@ if [ -z "$skip_zipfile" ]; then
 	fi
 
 	if [ -n "$GITHUB_ACTIONS" ]; then
-		echo "::set-output name=archive_path::${archive}"
+		echo "ARCHIVE_PATH=${archive}" >> $GITHUB_OUTPUT
 	fi
 
 	start_group "Creating archive: $archive_name ($archive_label)" "archive"
@@ -2539,7 +2550,7 @@ upload_curseforge() {
 			esac
 
 			# check the version
-			if ! jq -e --arg v "$version_name" 'map(select(.name == $v)) | length > 0' <<< "$_cf_versions" &>/dev/null; then
+			if ! jq -e --arg v "$version_name" --argjson t "$game_id" 'map(select(.gameVersionTypeID == $t and .name == $v)) | length > 0' <<< "$_cf_versions" &>/dev/null; then
 				# no match, so grab the next highest version (try to avoid testing versions)
 				version_name=$( echo "$_cf_versions" | jq -r --arg v "$version_name" --argjson t "$game_id" 'map(select(.gameVersionTypeID == $t and .name < $v)) | max_by(.id) | .name // empty' )
 				if [[ -z $version_name ]]; then
@@ -2790,7 +2801,7 @@ upload_wago() {
 	EOF
 	)
 
-	echo "Uploading $archive_name ($_wago_game_version $file_type) to Wago"
+	echo "Uploading $archive_name ($_wago_game_version $file_type) to https://addons.wago.io/addons/$wagoid"
 	resultfile="$releasedir/wago_result.json"
 	if result=$( echo "$_wago_payload" | curl -sS --retry 3 --retry-delay 10 \
 			-w "%{http_code}" -o "$resultfile" \
